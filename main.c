@@ -19,6 +19,7 @@
 
 const char *prog_name;
 int loglevel = 0;
+int grab_device = 0;
 
 // Function to check if a string matches a glob pattern
 bool matches_glob(const char *str, const char *pattern) {
@@ -99,6 +100,10 @@ int find_joystick_device(char *pattern) {
           closedir(dp);
           if (loglevel > 0)
             fprintf(stderr, "found device %s\n", device_path);
+          if (grab_device && (ioctl(fd, EVIOCGRAB, 1) < 0)) {
+            perror("failed to grab device");
+            exit(1);
+          }
           return fd;
         }
         close(fd);
@@ -111,7 +116,7 @@ int find_joystick_device(char *pattern) {
 }
 
 void usage(FILE *out) {
-  fprintf(out, "%s: usage: %s [-h] pattern\n", prog_name, prog_name);
+  fprintf(out, "%s: usage: %s [-h] [-g] pattern\n", prog_name, prog_name);
 }
 
 int main(int argc, char *argv[]) {
@@ -121,13 +126,16 @@ int main(int argc, char *argv[]) {
 
   prog_name = argv[0];
 
-  while (-1 != (ch = getopt(argc, argv, "hv"))) {
+  while (-1 != (ch = getopt(argc, argv, "ghv"))) {
     switch (ch) {
     case 'h':
       usage(stdout);
       exit(0);
     case 'v':
       loglevel++;
+      break;
+    case 'g':
+      grab_device=1;
       break;
     default:
       usage(stderr);
