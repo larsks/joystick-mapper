@@ -26,17 +26,7 @@ bool matches_glob(const char *str, const char *pattern) {
 }
 
 void setup_uinput_device(int uinput_fd) {
-  struct uinput_user_dev uidev;
-
-  // Clear the uidev structure
-  memset(&uidev, 0, sizeof(uidev));
-
-  // Set up uinput device for keyboard events
-  snprintf(uidev.name, UINPUT_MAX_NAME_SIZE, "uinput-joystick");
-  uidev.id.bustype = BUS_USB;
-  uidev.id.vendor = USB_VENDOR;
-  uidev.id.product = USB_PRODUCT;
-  uidev.id.version = USB_VERSION;
+  struct uinput_setup usetup;
 
   // Enable key events
   ioctl(uinput_fd, UI_SET_EVBIT, EV_KEY);
@@ -45,9 +35,18 @@ void setup_uinput_device(int uinput_fd) {
   ioctl(uinput_fd, UI_SET_KEYBIT, KEY_LEFT);
   ioctl(uinput_fd, UI_SET_KEYBIT, KEY_RIGHT);
 
-  // Write uinput_user_dev structure to uinput
-  if (write(uinput_fd, &uidev, sizeof(uidev)) < 0) {
-    perror("failed to register uinput record");
+  // Clear the uidev structure
+  memset(&usetup, 0, sizeof(usetup));
+
+  // Set up uinput device for keyboard events
+  snprintf(usetup.name, UINPUT_MAX_NAME_SIZE, "jsmapper");
+  usetup.id.bustype = BUS_USB;
+  usetup.id.vendor = USB_VENDOR;
+  usetup.id.product = USB_PRODUCT;
+  usetup.id.version = USB_VERSION;
+
+  if (ioctl(uinput_fd, UI_DEV_SETUP, &usetup) < 0) {
+    perror("failed to setup uinput device");
     exit(EXIT_FAILURE);
   }
 
@@ -58,28 +57,23 @@ void setup_uinput_device(int uinput_fd) {
   }
 }
 
-void send_key_event(int uinput_fd, int key, int value) {
+void emit(int uinput_fd, int type, int code, int value) {
   struct input_event ev;
 
-  // Prepare the input event structure
   memset(&ev, 0, sizeof(struct input_event));
-  ev.type = EV_KEY;
-  ev.code = key;
+  ev.type = type;
+  ev.code = code;
   ev.value = value;
-  if (write(uinput_fd, &ev, sizeof(struct input_event)) < 0) {
-    perror("failed to write key event");
-    exit(EXIT_FAILURE);
-  }
 
-  // Send a synchronization event
-  memset(&ev, 0, sizeof(struct input_event));
-  ev.type = EV_SYN;
-  ev.code = SYN_REPORT;
-  ev.value = 0;
-  if (write(uinput_fd, &ev, sizeof(struct input_event)) < 0) {
-    perror("failed to write sync event");
-    exit(EXIT_FAILURE);
+  if (write(uinput_fd, &ev, sizeof(ev)) < 0) {
+    perror("failed to write input event");
+    exit(1);
   }
+}
+
+void send_key_event(int uinput_fd, int key, int value) {
+  emit(uinput_fd, EV_KEY, key, value);
+  emit(uinput_fd, EV_SYN, SYN_REPORT, 0);
 }
 
 int find_joystick_device(char *pattern) {
